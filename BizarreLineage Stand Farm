@@ -1,0 +1,490 @@
+-- ================================================================
+-- CUSTOM FILTER CONFIG
+-- ================================================================
+
+local CONFIG = {
+
+    standNames = nil, -- Set to nil to allow any stand.
+    -- standNames = {"Killer Queen", "The Hand", "Star Platinum"},
+
+    -- Set both to nil to disable trait filtering entirely.
+    traitRarities = {"Mythical"}, -- Accept any trait whose rarity tier is in this list.
+    traitNames    = nil, -- Accept these specific trait names regardless of rarity.
+ -- traitNames    = {"Dominant", "Cursed"}, (for Legendary exceptions)
+
+    skinRarities = {"Legendary", "Mythical"}, -- Set to nil to disable skin filtering entirely.
+
+    -- Each combo = {Strength, Speed, Specialty} in order.
+    -- statMatchMode:
+    --   "exact" → position matters   {"S","S","A"} = Str:S Spd:S Spe:A only
+    --   "any"   → position ignored   {"S","S","A"} = any two S's + one A
+    -- Set statCombos to nil to disable stat filtering entirely.
+    statCombos = {
+        {"S","S","S"},
+        {"S","S","A"},
+    },
+    statMatchMode = "any",  -- Set to "exact" to enforce strict slot order
+
+    -- OVERALL LOGIC MODE
+    -- "ANY" → stop when at least ONE condition hits
+    -- "ALL" → stop only when EVERY enabled condition hits at once
+    mode = "ANY",
+}
+
+-- ================================================================
+-- Don't change anything from below this point if u dunno what ur doing
+-- ================================================================
+
+local gradeMap   = {"D", "C", "B", "A", "S"}
+local gradeIndex = {D=1, C=2, B=3, A=4, S=5}
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+local player = Players.LocalPlayer
+
+_G.standFarm = false -- press P to toggle ON/OFF
+
+-- ================================================================
+-- NOTIFICATION GUI
+-- ================================================================
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "StandFarmNotif"
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+-- Outer frame: fixed width, auto height, anchored bottom-right
+local notifFrame = Instance.new("Frame")
+notifFrame.Name = "NotifFrame"
+notifFrame.AnchorPoint = Vector2.new(1, 1)
+notifFrame.Size = UDim2.new(0, 300, 0, 0)
+notifFrame.AutomaticSize = Enum.AutomaticSize.Y
+notifFrame.Position = UDim2.new(1, -14, 1, -80)
+notifFrame.BackgroundColor3 = Color3.fromRGB(10, 16, 32)
+notifFrame.BackgroundTransparency = 1
+notifFrame.BorderSizePixel = 0
+notifFrame.ClipsDescendants = false
+notifFrame.Parent = screenGui
+
+local uiCorner = Instance.new("UICorner")
+uiCorner.CornerRadius = UDim.new(0, 10)
+uiCorner.Parent = notifFrame
+
+local uiStroke = Instance.new("UIStroke")
+uiStroke.Color = Color3.fromRGB(50, 110, 230)
+uiStroke.Thickness = 1.5
+uiStroke.Transparency = 1
+uiStroke.Parent = notifFrame
+
+-- Inner content frame (carries UIListLayout so closeBtn is excluded)
+local contentFrame = Instance.new("Frame")
+contentFrame.Name = "Content"
+contentFrame.Size = UDim2.new(1, 0, 0, 0)
+contentFrame.AutomaticSize = Enum.AutomaticSize.Y
+contentFrame.BackgroundTransparency = 1
+contentFrame.BorderSizePixel = 0
+contentFrame.Parent = notifFrame
+
+local uiPadding = Instance.new("UIPadding")
+uiPadding.PaddingLeft = UDim.new(0, 14)
+uiPadding.PaddingRight = UDim.new(0, 36)
+uiPadding.PaddingTop = UDim.new(0, 9)
+uiPadding.PaddingBottom = UDim.new(0, 11)
+uiPadding.Parent = contentFrame
+
+local uiLayout = Instance.new("UIListLayout")
+uiLayout.SortOrder = Enum.SortOrder.LayoutOrder
+uiLayout.FillDirection = Enum.FillDirection.Vertical
+uiLayout.Padding = UDim.new(0, 5)
+uiLayout.Parent = contentFrame
+
+-- Title
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Name = "Title"
+titleLabel.LayoutOrder = 1
+titleLabel.Size = UDim2.new(1, 0, 0, 17)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Text = "Stand Farm"
+titleLabel.TextColor3 = Color3.fromRGB(70, 150, 255)
+titleLabel.TextTransparency = 1
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextSize = 13
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.Parent = contentFrame
+
+-- Divider line
+local divider = Instance.new("Frame")
+divider.Name = "Divider"
+divider.LayoutOrder = 2
+divider.Size = UDim2.new(1, 0, 0, 1)
+divider.BackgroundColor3 = Color3.fromRGB(50, 90, 180)
+divider.BackgroundTransparency = 1
+divider.BorderSizePixel = 0
+divider.Parent = contentFrame
+
+-- Message (auto-height)
+local msgLabel = Instance.new("TextLabel")
+msgLabel.Name = "Message"
+msgLabel.LayoutOrder = 3
+msgLabel.Size = UDim2.new(1, 0, 0, 0)
+msgLabel.AutomaticSize = Enum.AutomaticSize.Y
+msgLabel.BackgroundTransparency = 1
+msgLabel.Text = ""
+msgLabel.TextColor3 = Color3.fromRGB(185, 205, 235)
+msgLabel.TextTransparency = 1
+msgLabel.Font = Enum.Font.GothamBold
+msgLabel.TextSize = 15
+msgLabel.TextWrapped = true
+msgLabel.TextXAlignment = Enum.TextXAlignment.Left
+msgLabel.TextYAlignment = Enum.TextYAlignment.Top
+msgLabel.Parent = contentFrame
+
+-- X close button: absolute position in notifFrame, NOT in contentFrame
+local closeBtn = Instance.new("TextButton")
+closeBtn.Name = "CloseBtn"
+closeBtn.AnchorPoint = Vector2.new(1, 0)
+closeBtn.Position = UDim2.new(1, -6, 0, 6)
+closeBtn.Size = UDim2.new(0, 24, 0, 24)
+closeBtn.BackgroundColor3 = Color3.fromRGB(25, 40, 80)
+closeBtn.BackgroundTransparency = 1
+closeBtn.BorderSizePixel = 0
+closeBtn.Text = "X"
+closeBtn.TextColor3 = Color3.fromRGB(100, 150, 230)
+closeBtn.TextTransparency = 1
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 12
+closeBtn.ZIndex = 5
+closeBtn.Parent = notifFrame
+
+local closeBtnCorner = Instance.new("UICorner")
+closeBtnCorner.CornerRadius = UDim.new(0, 6)
+closeBtnCorner.Parent = closeBtn
+
+-- ================================================================
+-- NOTIFICATION LOGIC
+-- ================================================================
+
+local FADE_IN  = 0.25
+local FADE_OUT = 0.35
+local AUTO_HIDE = 5
+
+local currentFadeTask = nil
+local isShowing = false
+
+local function applyTween(transparency, bgTrans, strokeTrans, btnBgTrans, duration)
+    local ti = TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    TweenService:Create(notifFrame, ti, { BackgroundTransparency = bgTrans }):Play()
+    TweenService:Create(uiStroke,   ti, { Transparency = strokeTrans }):Play()
+    TweenService:Create(divider,    ti, { BackgroundTransparency = transparency > 0 and 1 or 0.55 }):Play()
+    TweenService:Create(titleLabel, ti, { TextTransparency = transparency }):Play()
+    TweenService:Create(msgLabel,   ti, { TextTransparency = transparency }):Play()
+    TweenService:Create(closeBtn,   ti, { TextTransparency = transparency,
+                                          BackgroundTransparency = btnBgTrans }):Play()
+end
+
+local function doHide()
+    if currentFadeTask then task.cancel(currentFadeTask) currentFadeTask = nil end
+    isShowing = false
+    applyTween(1, 1, 1, 1, FADE_OUT)
+end
+
+local function showNotification(message, persistent)
+    if currentFadeTask then task.cancel(currentFadeTask) currentFadeTask = nil end
+
+    if isShowing then
+        applyTween(1, 1, 1, 1, FADE_OUT / 2)
+        task.wait(FADE_OUT / 2)
+    end
+
+    isShowing = true
+    msgLabel.Text = message
+
+    if persistent then
+        titleLabel.TextColor3      = Color3.fromRGB(100, 190, 255)
+        notifFrame.BackgroundColor3 = Color3.fromRGB(8, 18, 45)
+        uiStroke.Color             = Color3.fromRGB(80, 160, 255)
+        divider.BackgroundColor3   = Color3.fromRGB(80, 140, 255)
+        closeBtn.TextColor3        = Color3.fromRGB(120, 180, 255)
+    else
+        titleLabel.TextColor3      = Color3.fromRGB(70, 150, 255)
+        notifFrame.BackgroundColor3 = Color3.fromRGB(10, 16, 32)
+        uiStroke.Color             = Color3.fromRGB(50, 110, 230)
+        divider.BackgroundColor3   = Color3.fromRGB(50, 90, 180)
+        closeBtn.TextColor3        = Color3.fromRGB(100, 150, 230)
+    end
+
+    applyTween(0, 0.18, 0, 0.55, FADE_IN)
+
+    if not persistent then
+        currentFadeTask = task.delay(AUTO_HIDE, function()
+            currentFadeTask = nil
+            doHide()
+        end)
+    end
+end
+
+closeBtn.MouseButton1Click:Connect(doHide)
+
+-- ================================================================
+-- REMOTES + STAND DATA
+-- ================================================================
+
+local getdata = ReplicatedStorage:WaitForChild("requests")
+    :WaitForChild("miscellaneous")
+    :WaitForChild("get_data")
+
+local useItem = ReplicatedStorage:WaitForChild("requests")
+    :WaitForChild("character")
+    :WaitForChild("use_item")
+
+local standValue = player
+    :WaitForChild("PlayerData")
+    :WaitForChild("SlotData")
+    :WaitForChild("Stand")
+
+local function tableFind(tbl, value)
+    for _, v in pairs(tbl) do
+        if v == value then return true end
+    end
+    return false
+end
+
+local function getStandInfo()
+    local standCatalog = getdata:InvokeServer("stand")
+    local skinCatalog  = getdata:InvokeServer("stand_skin")
+    local traitCatalog = getdata:InvokeServer("trait")
+    local standData    = HttpService:JSONDecode(standValue.Value)
+
+    if not standData or not standData.Name then return nil end
+
+    local traitRarity = traitCatalog[standData.Trait]
+        and traitCatalog[standData.Trait].Rarity or "N/A"
+
+    local skinRarity = "None"
+    if standData.Skin then
+        local skins = skinCatalog[standData.Name]
+        skinRarity = (skins and skins[standData.Skin]) or "Common"
+    end
+
+    return {
+        name        = standData.Name,
+        trait       = standData.Trait,
+        traitRarity = traitRarity,
+        strength    = standData.Strength,
+        speed       = standData.Speed,
+        specialty   = standData.Specialty,
+        skin        = standData.Skin or "None",
+        skinRarity  = skinRarity,
+    }
+end
+
+local function getSignature(info)
+    return info.name .. "|" .. info.trait .. "|"
+        .. tostring(info.strength) .. tostring(info.speed) .. tostring(info.specialty) .. "|"
+        .. info.skin
+end
+
+-- ================================================================
+-- CONDITIONS
+-- ================================================================
+
+local function checkConditions(info)
+
+    -- Stand name pre-gate (hard filter, applies in both modes)
+    if CONFIG.standNames and not tableFind(CONFIG.standNames, info.name) then
+        return false, nil
+    end
+
+    -- Trait: rarity tier OR explicit name whitelist
+    local function traitHit()
+        if CONFIG.traitRarities and tableFind(CONFIG.traitRarities, info.traitRarity) then
+            return true
+        end
+        if CONFIG.traitNames and tableFind(CONFIG.traitNames, info.trait) then
+            return true
+        end
+        return false
+    end
+
+    -- Skin: rarity tier OR explicit name whitelist
+    local function skinHit()
+        if info.skin == "None" then return false end
+        if CONFIG.skinRarities and tableFind(CONFIG.skinRarities, info.skinRarity) then
+            return true
+        end
+        return false
+    end
+
+    -- Stats: exact slot order vs any-order (sorted distribution match)
+    local function statHit()
+        if not CONFIG.statCombos then return false, nil end
+
+        local actualGrades = {
+            gradeMap[info.strength],
+            gradeMap[info.speed],
+            gradeMap[info.specialty],
+        }
+
+        for _, combo in ipairs(CONFIG.statCombos) do
+            local matched = false
+
+            if CONFIG.statMatchMode == "any" then
+                local sc = {combo[1], combo[2], combo[3]}
+                local sa = {actualGrades[1], actualGrades[2], actualGrades[3]}
+                table.sort(sc)
+                table.sort(sa)
+                matched = (sc[1]==sa[1] and sc[2]==sa[2] and sc[3]==sa[3])
+            else -- "exact"
+                matched = (gradeIndex[combo[1]] == info.strength
+                       and gradeIndex[combo[2]] == info.speed
+                       and gradeIndex[combo[3]] == info.specialty)
+            end
+
+            if matched then
+                local label = actualGrades[1] .. actualGrades[2] .. actualGrades[3]
+                return true, "Stats: " .. label .. " [" .. CONFIG.statMatchMode .. "]"
+            end
+        end
+        return false, nil
+    end
+
+    -- Apply overall mode
+    if CONFIG.mode == "ALL" then
+        local reasons = {}
+
+        if CONFIG.traitRarities or CONFIG.traitNames then
+            if not traitHit() then return false, nil end
+            table.insert(reasons, "Trait: " .. info.traitRarity .. " (" .. info.trait .. ")")
+        end
+        if CONFIG.skinRarities then
+            if not skinHit() then return false, nil end
+            table.insert(reasons, "Skin: " .. info.skinRarity .. " (" .. info.skin .. ")")
+        end
+        if CONFIG.statCombos then
+            local ok, label = statHit()
+            if not ok then return false, nil end
+            table.insert(reasons, label)
+        end
+
+        if #reasons == 0 then return false, nil end
+        return true, table.concat(reasons, " | ")
+
+    else -- "ANY"
+        if traitHit() then
+            return true, "Trait: " .. info.traitRarity .. " (" .. info.trait .. ")"
+        end
+        if skinHit() then
+            return true, "Skin: " .. info.skinRarity .. " (" .. info.skin .. ")"
+        end
+        local ok, label = statHit()
+        if ok then return true, label end
+        return false, nil
+    end
+end
+
+-- ================================================================
+-- FARM LOOP
+-- ================================================================
+
+local function farmLoop()
+    local lastSig      = nil
+    local lastFired    = 0
+    local ARROW_CD     = 5
+    local metCondition = false
+
+    while _G.standFarm do
+        local info = getStandInfo()
+
+        if info then
+            local sig = getSignature(info)
+
+            if sig ~= lastSig then
+                lastSig = sig
+
+                print(string.format("[StandFarm] Stand: %s | Trait: %s (%s) | Stats: %s/%s/%s | Skin: %s (%s)",
+                    info.name,
+                    info.trait, info.traitRarity,
+                    gradeMap[info.strength]  or "?",
+                    gradeMap[info.speed]     or "?",
+                    gradeMap[info.specialty] or "?",
+                    info.skin, info.skinRarity
+                ))
+
+                showNotification(
+                    string.format("%s\nTrait: %s (%s)\nStats: %s / %s / %s\nSkin: %s (%s)",
+                        info.name,
+                        info.trait, info.traitRarity,
+                        gradeMap[info.strength]  or "?",
+                        gradeMap[info.speed]     or "?",
+                        gradeMap[info.specialty] or "?",
+                        info.skin, info.skinRarity),
+                    false
+                )
+
+                local hit, reason = checkConditions(info)
+                if hit then
+                    print("[StandFarm] CONDITION MET: " .. reason)
+                    print("[StandFarm] Stopping.")
+                    showNotification(
+                        string.format("%s\nTrait: %s (%s)\nStats: %s / %s / %s\nSkin: %s (%s)",
+                            info.name,
+                            info.trait, info.traitRarity,
+                            gradeMap[info.strength]  or "?",
+                            gradeMap[info.speed]     or "?",
+                            gradeMap[info.specialty] or "?",
+                            info.skin, info.skinRarity),
+                        true
+                    )
+                    _G.standFarm = false
+                    metCondition = true
+                    break
+                end
+            end
+
+            local now = tick()
+            if now - lastFired >= ARROW_CD then
+                useItem:FireServer("Stand Arrow")
+                lastFired = now
+                print("[StandFarm] Used Stand Arrow.")
+            end
+        else
+            print("[StandFarm] Could not read stand data, retrying...")
+        end
+
+        task.wait(2)
+    end
+
+    print("[StandFarm] Stopped.")
+    if not metCondition then
+        showNotification("Stand Farm stopped.", false)
+    end
+    metCondition = false
+end
+
+-- ================================================================
+-- P KEY TOGGLE
+-- ================================================================
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.P then
+        _G.standFarm = not _G.standFarm
+        if _G.standFarm then
+            print("[StandFarm] Toggled ON.")
+            showNotification("Stand Farm ON\nPress P to stop.", false)
+            task.spawn(farmLoop)
+        else
+            print("[StandFarm] Toggled OFF.")
+            showNotification("Stand Farm OFF.", false)
+        end
+    end
+end)
+
+-- Startup notification
+print("[StandFarm] Ready. Press P to start/stop.")
+showNotification("Stand Farm ready.\nPress P to start.", false)
