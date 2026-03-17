@@ -1,1 +1,469 @@
+--[[
+Toggle Raid Farm:  L key
+Toggle NPC Farm:   K key
+Toggle Auto Sell:  J key
+Toggle Auto Chest: H key
 
+- THIS SCRIPT AUTO REJOIN AFTER RAID IS DONE, PUT IT IN AUTO EXECUTE
+- IT WILL FORCE USE YOUR STAND, SO USE ANUBIS FOR BEST RESULTS
+]]
+_G.raidFarm      = true   -- Set to false to turn off, or press L on keyboard
+_G.raidType      = "Kira" -- Choose between Kira - Dio - Jotaro - Avdol
+_G.farmDistance  = 8      -- Negative number -> Underground mode, Recommend positive number - less glitchy
+_G.autoSell      = false  -- Sell ALL your UNLOCKED accessories, for money farm with raid
+_G.autoOpenChest = false  -- Auto open all Common and Rare Chest
+
+_G.npcFarm       = false  -- Custom npcs farm, mostly just for MIH quest
+-- TURN RAID FARM OFF IF YOU USE NPCFARM
+local npcToFarm = {
+    "Prison Escapee"
+}
+
+local autoSkills = { -- DO NOT use grab moves, it will fling you
+    ["E"] = true,
+    ["R"] = true,
+    ["Z"] = true,
+    ["X"] = false,
+    ["C"] = false,
+    ["V"] = false,
+
+    ["One"]   = false, -- Sub-ability and Fighting style moves
+    ["Two"]   = false,
+    ["Three"] = false,
+    ["Four"]  = false,
+    ["Five"]  = false,
+    ["Six"]   = false
+}
+
+------------------------------------------------------------------------
+-- Do NOT touch anything from below this point if u dunno what ur doing
+------------------------------------------------------------------------
+
+repeat task.wait() until game:IsLoaded()
+
+local Players          = game:GetService("Players")
+local UIS              = game:GetService("UserInputService")
+local HttpService      = game:GetService("HttpService")
+local VIM              = cloneref(game:GetService("VirtualInputManager"))
+local LocalPlayer      = Players.LocalPlayer
+local RS = game:GetService("ReplicatedStorage")
+local SG = game:GetService("StarterGui")
+local bindable = Instance.new("BindableFunction")
+
+------------------------------------------------------------------------
+-- Remotes
+------------------------------------------------------------------------
+
+local spawnRemote   = RS:WaitForChild("requests"):WaitForChild("character"):WaitForChild("spawn")
+local retryRemote   = RS:WaitForChild("requests"):WaitForChild("character"):WaitForChild("retryraid")
+local SellItem      = RS:WaitForChild("requests"):WaitForChild("general"):WaitForChild("SellItem")
+local UseItem       = RS:WaitForChild("requests"):WaitForChild("character"):WaitForChild("use_item")
+
+------------------------------------------------------------------------
+-- Utilities
+------------------------------------------------------------------------
+task.delay(5, function()
+    bindable.OnInvoke = function(buttonPressed)
+        if buttonPressed == "Copy discord" then
+            setclipboard(".nul_")
+        end
+    end
+
+    SG:SetCore("SendNotification", {
+        Title    = "Discord: .nul_",
+        Text     = "Script by nul8629 on V3rm.\nContact if needed.",
+        Duration = 300,
+        Callback = bindable,
+        Button1  = "Copy discord",
+        Button2  = "Who asked 😂"
+    })
+end)
+
+local function pressSkill(key)
+    task.spawn(function()
+        VIM:SendKeyEvent(true, Enum.KeyCode[key], false, game)
+        task.wait(0.1)
+        VIM:SendKeyEvent(false, Enum.KeyCode[key], false, game)
+    end)
+end
+
+local function checkRaid()
+    if _G.raidFarm and game.PlaceId == 14890802310 then
+        local raidNpc = nil
+
+        if _G.raidType == "Dio" then
+            LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(2793.927978515625, 950.7061157226562, 739.1791381835938)
+            while _G.raidFarm do
+                task.wait() 
+                raidNpc = workspace.Npcs:FindFirstChild("???")
+                if raidNpc then
+                    game:GetService("ReplicatedStorage").requests.character.dialogue:FireServer(raidNpc, "Raid.")
+                end
+            end
+        elseif _G.raidType == "Jotaro" then
+            LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(1071.1651611328125, 884.2255249023438, 208.62164306640625)
+            while _G.raidFarm do
+                task.wait() 
+                raidNpc = workspace.Npcs:FindFirstChild("Chumbo")
+                if raidNpc then
+                    game:GetService("ReplicatedStorage").requests.character.dialogue:FireServer(raidNpc, "Raid.")
+                end
+            end
+        elseif _G.raidType == "Avdol" then
+        LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(349.5882263183594, 876.0821533203125, 1011.446533203125)
+            while _G.raidFarm do
+                task.wait() 
+                raidNpc = workspace.Npcs:FindFirstChild("Muhammad Avdol")
+                if raidNpc then
+                    game:GetService("ReplicatedStorage").requests.character.dialogue:FireServer(raidNpc, "Raid.")
+                end
+            end
+        else
+            LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(1035.4267578125, 875.6024780273438, -651.2505493164062)
+            while _G.raidFarm do
+                task.wait() 
+                raidNpc = workspace.Npcs:FindFirstChild("Yoshikage Kira")
+                if raidNpc then
+                    game:GetService("ReplicatedStorage").requests.character.dialogue:FireServer(raidNpc, "Raid.")
+                end
+            end
+        end
+    end
+end
+
+local function enableStand()
+    local charStand = "." .. LocalPlayer.Name .. "'s Stand"
+    local stand = LocalPlayer.Character:FindFirstChild("Stand_Weapon")
+        or game.Workspace.Effects:FindFirstChild(charStand)
+    if not stand then pressSkill("Tab") end
+end
+
+local function useSkills()
+    task.spawn(function()
+        for key, enabled in pairs(autoSkills) do
+            if enabled then pressSkill(key) end
+        end
+    end)
+end
+
+local function clickM1()
+    task.spawn(function()
+        enableStand()
+        VIM:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+        task.wait(0.1)
+        VIM:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+    end)
+end
+
+local function getChar()
+    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    char:WaitForChild("HumanoidRootPart")
+    char:WaitForChild("Humanoid")
+    return char, char.HumanoidRootPart
+end
+
+local function strContains(haystack, needle)
+    local hLen = #haystack
+    local nLen = #needle
+    if nLen == 0 then return true end
+    if hLen < nLen then return false end
+    for i = 1, hLen - nLen + 1 do
+        local match = true
+        for j = 1, nLen do
+            if haystack:sub(i+j-1, i+j-1):lower() ~= needle:sub(j,j):lower() then
+                match = false
+                break
+            end
+        end
+        if match then return true end
+    end
+    return false
+end
+
+local function isValidTarget(model)
+    if model.Name == "Server" then return false end
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player.Character == model then return false end
+    end
+    if strContains(model.Name, "Hostage") then return false end
+    local hum  = model:FindFirstChildOfClass("Humanoid")
+    local root = model:FindFirstChild("HumanoidRootPart")
+        or model:FindFirstChildWhichIsA("BasePart", true)
+    return hum ~= nil and root ~= nil and hum.Health > 0
+end
+
+local function isListedNPC(modelName)
+    for _, name in ipairs(npcToFarm) do
+        if strContains(modelName, name) then return true end
+    end
+    return false
+end
+
+local function fightUntilDead(targetNPC, farmFlag)
+    local lockedRoot = targetNPC:FindFirstChild("HumanoidRootPart")
+        or targetNPC:FindFirstChildWhichIsA("BasePart", true)
+    if not lockedRoot then return end
+
+    print("[Farm] Locked onto: " .. targetNPC.Name)
+
+    local platform = Instance.new("Part")
+    platform.Size        = Vector3.new(10, 1, 10)
+    platform.Anchored    = true
+    platform.CanCollide  = true
+    platform.Transparency = 1
+    platform.CanTouch    = false
+    platform.CastShadow  = false
+    platform.Parent      = game.Workspace
+
+    local rsConn = true
+    task.spawn(function()
+        while rsConn do
+            task.wait()
+            local char = LocalPlayer.Character
+            if not char then continue end
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if not hrp then continue end
+            local targetPos = lockedRoot.Position + Vector3.new(0, _G.farmDistance, 0)
+            platform.CFrame = CFrame.new(targetPos + Vector3.new(0, -1, 0))
+            if _G.farmDistance < 0 then
+                hrp.CFrame = CFrame.new(targetPos) * CFrame.Angles(math.rad(90), 0, 0)
+            else 
+                hrp.CFrame = CFrame.new(targetPos) * CFrame.Angles(math.rad(-90), 0, 0)
+            end
+        end
+    end)
+
+    while farmFlag() do
+        local hum = targetNPC:FindFirstChildOfClass("Humanoid")
+        if not hum or hum.Health <= 0 or not targetNPC.Parent then break end
+        useSkills()
+        task.wait(0.1)
+        clickM1()
+        task.wait(0.1)
+    end
+
+    platform:Destroy()
+    rsConn = false
+    task.wait()
+end
+
+------------------------------------------------------------------------
+-- Auto Sell helpers
+------------------------------------------------------------------------
+
+local function buildPipsTable(pips)
+    local t = {}
+    if pips then
+        for i, pip in ipairs(pips) do
+            t[i] = pip
+        end
+    end
+    return t
+end
+
+local function doSellPass()
+    local inventoryValue = LocalPlayer
+        :WaitForChild("PlayerData")
+        :WaitForChild("SlotData")
+        :WaitForChild("Inventory")
+
+    local raw = inventoryValue.Value
+    if raw == "" then return end
+
+    local ok, items = pcall(HttpService.JSONDecode, HttpService, raw)
+    if not ok then
+        warn("[AutoSell] JSON parse failed: " .. tostring(items))
+        return
+    end
+
+    local soldCount = 0
+    for _, item in ipairs(items) do
+        if item.ID and not item.Locked then
+            local args = {
+                [1] = {
+                    [1] = {
+                        ["ID"]         = item.ID,
+                        ["Pips"]       = buildPipsTable(item.Pips),
+                        ["Name"]       = item.Name,
+                        ["duplicates"] = 1
+                    }
+                }
+            }
+            SellItem:FireServer(unpack(args))
+            soldCount += 1
+            print(string.format("[AutoSell] Sold '%s' (%s)", item.Name, item.ID))
+            task.wait(0.2)
+        end
+    end
+
+    if soldCount > 0 then
+        print(string.format("[AutoSell] Pass done - sold %d item(s).", soldCount))
+    end
+end
+
+------------------------------------------------------------------------
+-- Startup
+------------------------------------------------------------------------
+if _G.raidFarm then
+    print("[Raid] Waiting for Main Menu...")
+
+    SG:SetCore("SendNotification", {
+        Title    = "Smart Raid Detect",
+        Text     = "Please wait!",
+        Duration = 10
+    })
+    local mainMenu = LocalPlayer.PlayerGui:WaitForChild("Main Menu", 10)
+
+    if mainMenu then
+        print("[Raid] Main Menu found!")
+
+        spawnRemote:FireServer()
+        print("[Raid] Fired spawn remote")
+
+        task.wait(1)
+        mainMenu.Enabled = false
+        print("[Raid] Main Menu disabled, starting farm...")
+    else
+        print("[Raid] Main Menu not found after 10s, skipping...")
+    end
+end
+
+checkRaid()
+------------------------------------------------------------------------
+-- Key Toggles
+------------------------------------------------------------------------
+
+UIS.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.L then
+        _G.raidFarm = not _G.raidFarm
+        print("[Raid] raidFarm " .. (_G.raidFarm and "ENABLED" or "DISABLED"))
+    elseif input.KeyCode == Enum.KeyCode.K then
+        _G.npcFarm = not _G.npcFarm
+        print("[NPC] npcFarm " .. (_G.npcFarm and "ENABLED" or "DISABLED"))
+    elseif input.KeyCode == Enum.KeyCode.J then
+        _G.autoSell = not _G.autoSell
+        print("[AutoSell] autoSell " .. (_G.autoSell and "ENABLED" or "DISABLED"))
+    elseif input.KeyCode == Enum.KeyCode.H then
+        _G.autoOpenChest = not _G.autoOpenChest
+        print("[AutoChest] autoOpenChest " .. (_G.autoOpenChest and "ENABLED" or "DISABLED"))
+    end
+end)
+
+------------------------------------------------------------------------
+-- Raid Complete Watcher
+------------------------------------------------------------------------
+
+task.spawn(function()
+    while true do
+        local raidComplete = LocalPlayer.PlayerGui:WaitForChild("raidcomplete", math.huge)
+        _G.autoOpenChest = false
+        print("[Raid] Raid complete detected! Waiting 3s...")
+        task.wait(3)
+        retryRemote:FireServer()
+        print("[Raid] Fired retryraid remote, restarting...")
+        repeat task.wait(0.5) until not LocalPlayer.PlayerGui:FindFirstChild("raidcomplete")
+    end
+end)
+
+------------------------------------------------------------------------
+-- Raid Farm Loop
+------------------------------------------------------------------------
+
+task.spawn(function()
+    while game.PlaceId ~= 14890802310 do
+        if not _G.raidFarm then task.wait(0.5) continue end
+
+        local liveFolder = game.Workspace:FindFirstChild("Live")
+        if not liveFolder then task.wait(0.5) continue end
+
+        local targets = {}
+        for _, npc in ipairs(liveFolder:GetChildren()) do
+            if isValidTarget(npc) then table.insert(targets, npc) end
+        end
+
+        if #targets == 0 then task.wait(1) continue end
+
+        print("[Raid] Found " .. #targets .. " targets, sweeping...")
+        for _, npc in ipairs(targets) do
+            if not _G.raidFarm then break end
+            local hum = npc:FindFirstChildOfClass("Humanoid")
+            if not hum or hum.Health <= 0 or not npc.Parent then continue end
+            fightUntilDead(npc, function() return _G.raidFarm end)
+        end
+
+        task.wait()
+    end
+end)
+
+------------------------------------------------------------------------
+-- NPC Farm Loop
+------------------------------------------------------------------------
+
+task.spawn(function()
+    while game.PlaceId == 14890802310 do
+        if not _G.npcFarm then task.wait(0.5) continue end
+
+        local liveFolder = game.Workspace:FindFirstChild("Live")
+        if not liveFolder then task.wait(0.5) continue end
+
+        local targets = {}
+        for _, npc in ipairs(liveFolder:GetChildren()) do
+            if isValidTarget(npc) and isListedNPC(npc.Name) then
+                table.insert(targets, npc)
+            end
+        end
+
+        if #targets == 0 then task.wait(1) continue end
+
+        print("[NPC] Found " .. #targets .. " listed targets, sweeping...")
+        for _, npc in ipairs(targets) do
+            if not _G.npcFarm then break end
+            local hum = npc:FindFirstChildOfClass("Humanoid")
+            if not hum or hum.Health <= 0 or not npc.Parent then continue end
+            fightUntilDead(npc, function() return _G.npcFarm end)
+        end
+
+        task.wait()
+    end
+end)
+
+------------------------------------------------------------------------
+-- Auto Sell Loop
+------------------------------------------------------------------------
+
+task.spawn(function()
+    while true do
+        if not _G.autoSell then task.wait(0.5) continue end
+        doSellPass()
+        task.wait(3)
+    end
+end)
+
+------------------------------------------------------------------------
+-- Auto Open Chest Loop
+------------------------------------------------------------------------
+
+task.spawn(function()
+    while true do
+        if not _G.autoOpenChest then task.wait(0.5) continue end
+
+        UseItem:FireServer(unpack({
+            [1] = "Rare Chest",
+            [2] = { ["UseAll"] = true }
+        }))
+        print("[AutoChest] Opened Rare Chests")
+
+        task.wait(0.5)
+
+        UseItem:FireServer(unpack({
+            [1] = "Common Chest",
+            [2] = { ["UseAll"] = true }
+        }))
+        print("[AutoChest] Opened Common Chests")
+
+        task.wait(3)
+    end
+end)
+
+print("[Script] Loaded. L = Raid | K = NPC | J = AutoSell | H = AutoChest")
